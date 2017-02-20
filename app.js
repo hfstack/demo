@@ -1,28 +1,53 @@
-const app = require('koa')();
-const koa = require('koa-router')();
-const json = require('koa-json');
-const logger = require('koa-logger');
-const auth = require('./server/routes/auth.js');
-const api = require('./server/routes/api.js');
-const jwt = require('koa-jwt');
-const server = require('koa-static');
-const path = require('path');
-const historyApiFallback = require('koa-history-api-fallback'); // 引入依赖
+const express = require('express')
+const path = require('path')
+const http = require('http')
+global.NODE_ENV = process.env.NODE_ENV || 'production'
 
-app.use(require('koa-bodyparser')());
-app.use(json());
-app.use(logger());
-app.use(historyApiFallback());
-app.use(server(path.resolve('dist')));
-app.listen(80, () => {
-  console.log('Koa is listening in 8889');
-});
-koa.use('/auth', auth.routes()); // 挂载到koa-router上，同时会让所有的auth的请求路径前面加上'/auth'的请求路径。
-koa.use('/api', jwt({secret: 'vue-koa-demo'}), api.routes());
+const PORT = 8080
+const isDev = NODE_ENV === 'development';
+const app = express()
+const router = require('./server/routers/router')
 
-app.use(koa.routes());
-app.on('error', function(err, ctx) {
-  console.log('server', err);
-});
+app.set('views', path.join(__dirname, 'server/views'))
+app.set('view engine', 'pug')
 
-module.exports = app;
+app.use(router)
+
+if (isDev) {
+    // local variables for all views
+    app.locals.env = NODE_ENV;
+    app.locals.reload = true;
+    
+    // static assets served by webpack-dev-middleware & webpack-hot-middleware for development
+    const webpack = require('webpack')
+    const webpackDevMiddleware = require('webpack-dev-middleware')
+    const webpackHotMiddleware = require('webpack-hot-middleware')
+    const webpackDevConfig = require('./build/webpack.config.js')
+
+    const compiler = webpack(webpackDevConfig)
+
+    app.use(webpackDevMiddleware(compiler, {
+        publicPath: webpackDevConfig.output.publicPath,
+        noInfo: true,
+        stats: {
+            colors: true
+        }
+    }))
+
+    app.use(webpackHotMiddleware(compiler))
+
+    const server = http.createServer(app)
+
+    app.use(express.static(path.join(__dirname, 'public')))
+
+    server.listen(PORT, function(){
+        console.log('App (dev) is now running on PORT '+ PORT +'!')
+    })
+} else {
+    // static assets served by express.static() for production
+    app.use(express.static(path.join(__dirname, 'public')))
+    
+    app.listen(PORT, function () {
+        console.log('App (production) is now running on PORT '+ PORT +'!')
+    })
+}
